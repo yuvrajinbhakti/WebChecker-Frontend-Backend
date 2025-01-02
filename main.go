@@ -12,7 +12,7 @@ import (
 )
 
 type DomainURL struct {
-	DomainURL string `string:"domainurl"`
+	DomainURL string `json:"domainurl"`
 }
 
 type DomainVar struct {
@@ -27,12 +27,19 @@ type DomainVar struct {
 var domainVars []DomainVar
 
 func formHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	var domainUrl DomainURL
-	json.NewDecoder(r.Body).Decode(&domainUrl)
-	domainVar := isValidDomain(domainUrl.DomainURL)
-	domainVars = append(domainVars, domainVar)
-	json.NewEncoder(w).Encode(domainVars)
+    w.Header().Set("Content-Type", "application/json")
+    
+    var domainUrl DomainURL
+    err := json.NewDecoder(r.Body).Decode(&domainUrl)
+    if err != nil {
+        log.Printf("Error decoding request: %v\n", err)
+        http.Error(w, err.Error(), http.StatusBadRequest)
+        return
+    }
+    
+    domainVar := isValidDomain(domainUrl.DomainURL)
+    domainVars = append(domainVars, domainVar)
+    json.NewEncoder(w).Encode(domainVars)
 }
 
 func isValidDomain(domain string) DomainVar {
@@ -80,8 +87,25 @@ func isValidDomain(domain string) DomainVar {
 }
 
 func main() {
-	r := mux.NewRouter()
-	r.HandleFunc("/form", formHandler).Methods("POST")
-	fmt.Print("Server is running on port 8080\n")
-	log.Fatal(http.ListenAndServe(":8080", r))
+    r := mux.NewRouter()
+    
+    // Add global CORS middleware
+    r.Use(func(next http.Handler) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            w.Header().Set("Access-Control-Allow-Origin", "*")
+            w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+            w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+            
+            if r.Method == "OPTIONS" {
+                w.WriteHeader(http.StatusOK)
+                return
+            }
+            
+            next.ServeHTTP(w, r)
+        })
+    })
+    
+    r.HandleFunc("/form", formHandler).Methods("POST", "OPTIONS")
+    fmt.Print("Server is running on port 8080\n")
+    log.Fatal(http.ListenAndServe(":8080", r))
 }
